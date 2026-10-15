@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+.ipynb_checkpoints/
+.env
+*.pt
+*.pth
+*.onnx
+wandb/
+data/raw/*
+data/landmarks/*
+data/custom/*
+!data/raw/.gitkeep
+!data/landmarks/.gitkeep
+!data/custom/.gitkeep

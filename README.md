@@ -1,3 +1,15 @@
-# sign-language-translator
-Real-time ASL-to-text-and-speech translator using MediaPipe landmarks and sequence models (LSTM/Transformer).
-A webcam-based system that recognizes ASL signs in real time, converts them to text, and speaks the result. Instead of classifying raw video, it extracts hand, pose and face landmarks with MediaPipe and feeds those keypoint sequences to a lightweight model. That makes it fast, runs on a laptop CPU, and is robust to lighting and background.
+# Sign Language Translator
+
+Real-time ASL-to-text-and-speech translator using MediaPipe landmarks and sequence models (LSTM/TCN/Transformer).
+
+## Structure
+
+- `data/` raw data, extracted landmarks, custom recordings (not tracked)
+- `notebooks/` exploration and landmark visualization
+- `src/` extraction, dataset, models, training, evaluation, real-time inference
+- `app/` demo application
+- `configs/` training and inference settings
+
+## Status
+
+In progress.
