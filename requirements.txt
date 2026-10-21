@@ -10,3 +10,5 @@ pyttsx3
 streamlit
 streamlit-webrtc
 wandb
+pyarrow
+tqdm
