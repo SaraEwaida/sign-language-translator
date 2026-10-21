@@ -79,13 +79,9 @@ def signer_split(participants: np.ndarray, n_val: int = 3, seed: int = 42):
     return np.where(~val_mask)[0], np.where(val_mask)[0], val_signers
 
 
-def load_splits(data_dir: Path = DATA_DIR, n_val_signers: int = 3,
-                subset: int | None = None, seed: int = 42):
-    """Return (train_ds, val_ds, val_signers). subset = total samples to keep."""
-    X = np.load(data_dir / "X.npy", mmap_mode="r")
-    y = np.load(data_dir / "y.npy").astype(np.int64)
-    p = np.load(data_dir / "participants.npy")
-
+def split_indices(p: np.ndarray, n_val_signers: int = 3,
+                  subset: int | None = None, seed: int = 42):
+    """Return (train_idx, val_idx, val_signers). subset = total samples to keep."""
     tr, va, val_signers = signer_split(p, n_val_signers, seed)
     if subset:
         rng = np.random.default_rng(seed)
@@ -94,6 +90,17 @@ def load_splits(data_dir: Path = DATA_DIR, n_val_signers: int = 3,
         va = np.sort(rng.choice(va, size=max(1, int(len(va) * frac)), replace=False))
 
     assert not set(p[tr]) & set(p[va]), "signer leakage between train and val"
+    return tr, va, val_signers
+
+
+def load_splits(data_dir: Path = DATA_DIR, n_val_signers: int = 3,
+                subset: int | None = None, seed: int = 42):
+    """Return (train_ds, val_ds, val_signers). subset = total samples to keep."""
+    X = np.load(data_dir / "X.npy", mmap_mode="r")
+    y = np.load(data_dir / "y.npy").astype(np.int64)
+    p = np.load(data_dir / "participants.npy")
+
+    tr, va, val_signers = split_indices(p, n_val_signers, subset, seed)
 
     train_ds = SignDataset(np.asarray(X[tr]), y[tr], train=True)  # loads into RAM
     val_ds = SignDataset(np.asarray(X[va]), y[va], train=False)
