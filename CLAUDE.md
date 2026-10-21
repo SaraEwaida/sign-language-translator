@@ -36,8 +36,8 @@ Scope: isolated sign recognition (250 signs), not continuous ASL translation. Co
 - Run: python -m src.train --subset 4000 --epochs 2 (smoke test passed, ~28 s/epoch on 3.4k samples)
 
 ## Current step
-- Learning check in progress: python -m src.train --subset 20000 --epochs 10
-- Estimated full run on CPU: ~11 min/epoch, ~7.5 h for 40 epochs. Considering a Kaggle GPU instead.
+- Learning check done: python -m src.train --subset 20000 --epochs 10 -> val top-1 0.366, top-5 0.640 (signer-independent), ~148 s/epoch on CPU.
+- Full BiLSTM run on CPU: python -u -m src.train --epochs 30 (log: train_bilstm.log, not committed).
 
 ## Next steps
 1. Full BiLSTM training; record signer-independent val top-1/top-5.
