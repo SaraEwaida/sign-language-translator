@@ -1,8 +1,8 @@
 """Train a sign classifier with a signer-independent validation split.
 
 Examples:
-  python -m src.train --subset 4000 --epochs 2    # smoke test
-  python -m src.train --epochs 40                 # full run
+  python -m src.train --subset 4000 --epochs 2                        # smoke test
+  python -u -m src.train --epochs 30 --resume 2>&1 | tee -a train_bilstm.log
 """
 import argparse
 import time
@@ -72,6 +72,7 @@ def main() -> None:
     parser.add_argument("--num-workers", type=int, default=0)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--out-dir", type=Path, default=Path("checkpoints"))
+    parser.add_argument("--resume", action="store_true", help="continue from <out-dir>/<model>_last.pt")
     args = parser.parse_args()
 
     set_seed(args.seed)
@@ -96,9 +97,26 @@ def main() -> None:
 
     args.out_dir.mkdir(parents=True, exist_ok=True)
     ckpt_path = args.out_dir / f"{args.model}.pt"
-    best_top1 = -1.0
+    last_path = args.out_dir / f"{args.model}_last.pt"
+    best_top1, start_epoch = -1.0, 1
 
-    for epoch in range(1, args.epochs + 1):
+    if args.resume and last_path.exists():
+        state = torch.load(last_path, map_location=device, weights_only=False)
+        for key in ("model", "epochs", "batch_size", "lr", "subset", "seed"):
+            if state["args"][key] != getattr(args, key):
+                raise SystemExit(f"--{key.replace('_', '-')} differs from the saved run: "
+                                 f"{state['args'][key]} vs {getattr(args, key)}")
+        model.load_state_dict(state["model"])
+        optimizer.load_state_dict(state["optimizer"])
+        scheduler.load_state_dict(state["scheduler"])
+        torch.set_rng_state(state["torch_rng"])
+        np.random.set_state(state["numpy_rng"])
+        best_top1, start_epoch = state["best_top1"], state["epoch"] + 1
+        print(f"resumed from {last_path}: starting at epoch {start_epoch}, best top1 {best_top1:.3f}")
+    elif args.resume:
+        print(f"no {last_path} found, starting from scratch")
+
+    for epoch in range(start_epoch, args.epochs + 1):
         t0 = time.time()
         tr_loss, tr_acc = train_one_epoch(model, train_loader, criterion,
                                           optimizer, scheduler, device)
@@ -117,6 +135,15 @@ def main() -> None:
         print(f"epoch {epoch:3d} | train loss {tr_loss:.3f} acc {tr_acc:.3f} | "
               f"val loss {va_loss:.3f} top1 {top1:.3f} top5 {top5:.3f} | "
               f"{time.time() - t0:.0f}s{'  *saved' if improved else ''}")
+
+        tmp_path = last_path.with_suffix(".tmp")  # write then rename: safe if interrupted
+        torch.save({
+            "model": model.state_dict(), "optimizer": optimizer.state_dict(),
+            "scheduler": scheduler.state_dict(), "epoch": epoch, "best_top1": best_top1,
+            "args": vars(args) | {"out_dir": str(args.out_dir)},
+            "torch_rng": torch.get_rng_state(), "numpy_rng": np.random.get_state(),
+        }, tmp_path)
+        tmp_path.replace(last_path)
 
     print(f"best val top1 {best_top1:.3f} -> {ckpt_path}")
 

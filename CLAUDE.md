@@ -30,22 +30,32 @@ Scope: isolated sign recognition (250 signs), not continuous ASL translation. Co
 
 ## Code (all tested and committed)
 - src/check_data.py: data sanity check
-- src/dataset.py: signer-independent split (3 held-out signers, seed 42 -> 4718, 36257, 37779), augmentation (mirror with hand/pose swap, rotation +-15 deg, scale 0.8-1.2, shift +-0.1, temporal crop 80-100%; missing points kept at 0). Returns (64, 225) float32 tensors.
+- src/dataset.py: signer-independent split via split_indices() (3 held-out signers, seed 42 -> 4718, 36257, 37779), augmentation (mirror with hand/pose swap, rotation +-15 deg, scale 0.8-1.2, shift +-0.1, temporal crop 80-100%; missing points kept at 0). Returns (64, 225) float32 tensors.
 - src/models/lstm.py: BiLSTMClassifier (input proj 225->256, 2-layer BiLSTM, mean+max pooling, 2.95M params, 6.6 ms/sample CPU)
-- src/train.py: AdamW, OneCycleLR, label smoothing 0.1, grad clip 1.0, saves best val top-1 to checkpoints/bilstm.pt. num_workers=0 default (Windows RAM).
-- Run: python -m src.train --subset 4000 --epochs 2 (smoke test passed, ~28 s/epoch on 3.4k samples)
+- src/train.py: AdamW, OneCycleLR, label smoothing 0.1, grad clip 1.0. Saves best val top-1 to checkpoints/<model>.pt and full training state every epoch to checkpoints/<model>_last.pt. --resume continues from _last.pt (refuses if epochs, batch size, lr, subset, seed or model differ). num_workers=0 default (Windows RAM).
+- src/evaluate.py: written by Claude Code; matches train.py metrics on the 20k-subset checkpoint (top-1 0.366, top-5 0.640). Not yet reviewed line by line.
+- Smoke test: python -m src.train --subset 4000 --epochs 2
+- Full run (start and resume use the same command, run in your own terminal):
+  python -u -m src.train --epochs 30 --resume 2>&1 | tee -a train_bilstm.log
+  Logs (*.log) are not committed.
+
+## Results (signer-independent: val signers 4718, 36257, 37779; 13,177 clips)
+| Model | Epochs | Top-1 (final) | Top-5 (final) | Best top-1 (epoch) | Train acc (final) | CPU time/epoch |
+|---|---|---|---|---|---|---|
+| BiLSTM | 30 | 0.573 | 0.798 | 0.574 (28) | 0.894 | ~700 s |
+
+- Protocol: fixed recipe (30 epochs, seed 42, same split) for every model; report final-epoch metrics, so no model selection uses the val signers. Do not tune hyperparameters on val; tuning requires separate test signers.
+- BiLSTM observations: val top-1 plateaued from ~epoch 19; val loss bottomed ~epoch 20 (~1.97) while train loss kept falling -> overfitting to training signers (train 0.894 vs val 0.573). Top-5 is 22 points above top-1, suggesting confusion between similar signs.
+- Earlier learning check (20k subset, 10 epochs): val top-1 0.366, top-5 0.640.
 
 ## Current step
-- Learning check done: python -m src.train --subset 20000 --epochs 10 -> val top-1 0.366, top-5 0.640 (signer-independent), ~148 s/epoch on CPU.
-- Full BiLSTM run on CPU: python -u -m src.train --epochs 30 (log: train_bilstm.log, not committed).
+Review src/evaluate.py, then run it on checkpoints/bilstm.pt (per-class accuracy, confusion matrix, most confused sign pairs).
 
 ## Next steps
-1. Full BiLSTM training; record signer-independent val top-1/top-5.
-2. Add held-out test signers for final reporting (val is used for checkpoint selection).
-3. TCN and Transformer models; results table.
-4. src/evaluate.py: top-1/top-5, per-class accuracy, confusion matrix, confusable signs.
-5. Experiments: presence mask, drop z, drop lower-body pose, face landmarks.
-6. src/realtime.py: webcam, MediaPipe Holistic, sliding window, smoothing, confidence threshold.
-7. Sentence builder + text-to-speech.
-8. Own recordings (10-20 words, multiple people) to test generalization.
-9. Streamlit demo, deploy (Hugging Face Spaces or Docker), demo video, README.
+1. TCN and Transformer models with the same recipe; add to the results table.
+2. Experiments (Milestone 4): presence mask, drop z, drop lower-body pose, face landmarks, stronger regularization against signer overfitting. Add held-out test signers before any hyperparameter tuning.
+3. src/realtime.py: webcam, MediaPipe Holistic, sliding window, smoothing, confidence threshold.
+4. Sentence builder + text-to-speech.
+5. Own recordings (10-20 words, multiple people) to test generalization.
+6. Streamlit demo, deploy (Hugging Face Spaces or Docker), demo video, README.
+7. Optional: fingerspelling (separate dataset) or drop from scope.
