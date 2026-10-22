@@ -41,17 +41,18 @@ Scope: isolated sign recognition (250 signs), not continuous ASL translation. Co
   Logs (*.log) are not committed.
 
 ## Results (signer-independent: val signers 4718, 36257, 37779; 13,177 clips)
-| Model | Epochs | Top-1 (final) | Top-5 (final) | Best top-1 (epoch) | Train acc (final) | CPU time/epoch |
-|---|---|---|---|---|---|---|
-| BiLSTM | 30 | 0.573 | 0.798 | 0.574 (28) | 0.894 | ~700 s |
+| Model | Epochs | Top-1 (final) | Top-5 (final) | Best top-1 (epoch) | Train acc (final) | CPU time/epoch | Params |
+|---|---|---|---|---|---|---|---|
+| BiLSTM | 30 | 0.573 | 0.798 | 0.574 (28) | 0.894 | ~700 s | 2.95M |
+| TCN | 30 | 0.605 | 0.817 | 0.605 (30) | 0.820 | ~950 s | 2.81M |
 
 - Protocol: fixed recipe (30 epochs, seed 42, same split) for every model; report final-epoch metrics, so no model selection uses the val signers. Do not tune hyperparameters on val; tuning requires separate test signers.
 - BiLSTM observations: val top-1 plateaued from ~epoch 19; val loss bottomed ~epoch 20 (~1.97) while train loss kept falling -> overfitting to training signers (train 0.894 vs val 0.573). Top-5 is 22 points above top-1, suggesting confusion between similar signs.
+- TCN observations: train-val gap 21.5 pts vs BiLSTM 32.1; TCN val loss still decreasing at epoch 30. Single seed and split, so the TCN vs BiLSTM difference is not yet shown to be robust.
 - Earlier learning check (20k subset, 10 epochs): val top-1 0.366, top-5 0.640.
 
 ## Current step
-Full TCN training, 30 epochs (run in your own terminal):
-  python -u -m src.train --model tcn --epochs 30 --resume 2>&1 | tee -a train_tcn.log
+Transformer model (src/models/transformer.py): same interface and recipe as BiLSTM/TCN.
 
 ## Next steps
 1. TCN and Transformer models with the same recipe; add to the results table.
