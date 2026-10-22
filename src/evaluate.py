@@ -65,8 +65,9 @@ def main() -> None:
 
     p = np.load(DATA_DIR / "participants.npy")
     _, va, val_signers = split_indices(p, subset=subset, seed=train_args["seed"])
-    assert val_signers.tolist() == ckpt["val_signers"], \
-        f"val signers {val_signers.tolist()} != checkpoint {ckpt['val_signers']}"
+    if "val_signers" in ckpt:  # _last.pt has none; split_indices() recomputes them from the seed
+        assert val_signers.tolist() == ckpt["val_signers"], \
+            f"val signers {val_signers.tolist()} != checkpoint {ckpt['val_signers']}"
 
     X = np.load(DATA_DIR / "X.npy", mmap_mode="r")
     y = np.load(DATA_DIR / "y.npy").astype(np.int64)
@@ -74,7 +75,7 @@ def main() -> None:
     loader = DataLoader(val_ds, batch_size=args.batch_size)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = MODELS[ckpt["model_name"]]().to(device)
+    model = MODELS[ckpt.get("model_name", train_args["model"])]().to(device)
     model.load_state_dict(ckpt["model"])
 
     names = load_sign_names()
@@ -82,8 +83,9 @@ def main() -> None:
     labels, top5 = predict_top5(model, loader, device)
     preds = top5[:, 0]
 
-    print(f"checkpoint {args.ckpt} | epoch {ckpt['epoch']} | "
-          f"logged val top1 {ckpt['val_top1']:.3f} top5 {ckpt['val_top5']:.3f}")
+    logged = (f" | logged val top1 {ckpt['val_top1']:.3f} top5 {ckpt['val_top5']:.3f}"
+              if "val_top1" in ckpt else "")
+    print(f"checkpoint {args.ckpt} | epoch {ckpt['epoch']}{logged}")
     print(f"val signers {val_signers.tolist()} | samples {len(labels)} | "
           f"{'full val' if subset is None else f'subset {subset}'}")
     print(f"top1 {np.mean(preds == labels):.3f} | "
