@@ -33,6 +33,7 @@ Scope: isolated sign recognition (250 signs), not continuous ASL translation. Co
 - src/dataset.py: signer-independent split via split_indices() (3 held-out signers, seed 42 -> 4718, 36257, 37779), augmentation (mirror with hand/pose swap, rotation +-15 deg, scale 0.8-1.2, shift +-0.1, temporal crop 80-100%; missing points kept at 0). Returns (64, 225) float32 tensors.
 - src/models/lstm.py: BiLSTMClassifier (input proj 225->256, 2-layer BiLSTM, mean+max pooling, 2.95M params, 6.6 ms/sample CPU)
 - src/models/tcn.py: TCNClassifier (same input proj and mean+max pooling head as BiLSTM; 4 residual blocks of two non-causal Conv1d, kernel 5, dilation 1/2/4/8, BatchNorm, GELU, dropout 0.3; receptive field 121 frames, covers the 64-frame clip; 2.81M params, 4.7 ms/sample CPU). Smoke test (--model tcn --subset 4000 --epochs 2): ~42 s/epoch on 3.4k clips.
+- src/models/transformer.py: TransformerClassifier (same input proj; learned positional embedding for 64 frames; 4 pre-norm encoder layers, d_model 256, 4 heads, FF 512, GELU, dropout 0.3; final LayerNorm; same mean+max pooling head as TCN; no padding mask, all clips are 64 frames; 2.31M params, 4.6-7.7 ms/sample CPU across two self-test runs). CPU smoke test: 114-129 s/epoch on 3.4k clips, so full runs go on a Kaggle GPU.
 - src/train.py: AdamW, OneCycleLR, label smoothing 0.1, grad clip 1.0. Saves best val top-1 to checkpoints/<model>.pt and full training state every epoch to checkpoints/<model>_last.pt. --resume continues from _last.pt (refuses if epochs, batch size, lr, subset, seed or model differ). num_workers=0 default (Windows RAM).
 - src/evaluate.py: top-1/top-5, per-class accuracy, confusion matrix, most confused pairs; rebuilds the val split with split_indices(). Loads <model>.pt and <model>_last.pt. Reviewed. Matches train.py metrics on the 20k-subset checkpoint (top-1 0.366, top-5 0.640). Epoch-30 BiLSTM (bilstm_last.pt, --full-val): top-1 0.573, top-5 0.798, per-class mean 0.569.
 - Smoke test: python -m src.train --subset 4000 --epochs 2
@@ -41,24 +42,26 @@ Scope: isolated sign recognition (250 signs), not continuous ASL translation. Co
   Logs (*.log) are not committed.
 
 ## Results (signer-independent: val signers 4718, 36257, 37779; 13,177 clips)
-| Model | Epochs | Top-1 (final) | Top-5 (final) | Best top-1 (epoch) | Train acc (final) | CPU time/epoch | Params |
+| Model | Epochs | Top-1 (final) | Top-5 (final) | Best top-1 (epoch) | Train acc (final) | Time/epoch | Params |
 |---|---|---|---|---|---|---|---|
-| BiLSTM | 30 | 0.573 | 0.798 | 0.574 (28) | 0.894 | ~700 s | 2.95M |
-| TCN | 30 | 0.605 | 0.817 | 0.605 (30) | 0.820 | ~950 s | 2.81M |
+| BiLSTM | 30 | 0.573 | 0.798 | 0.574 (28) | 0.894 | ~700 s (CPU) | 2.95M |
+| TCN | 30 | 0.605 | 0.817 | 0.605 (30) | 0.820 | ~950 s (CPU) | 2.81M |
+| Transformer | 30 | 0.571 | 0.791 | 0.571 (29) | 0.826 | ~82 s (Kaggle T4 GPU) | 2.31M |
 
 - Protocol: fixed recipe (30 epochs, seed 42, same split) for every model; report final-epoch metrics, so no model selection uses the val signers. Do not tune hyperparameters on val; tuning requires separate test signers.
 - BiLSTM observations: val top-1 plateaued from ~epoch 19; val loss bottomed ~epoch 20 (~1.97) while train loss kept falling -> overfitting to training signers (train 0.894 vs val 0.573). Top-5 is 22 points above top-1, suggesting confusion between similar signs.
 - TCN observations: train-val gap 21.5 pts vs BiLSTM 32.1; TCN val loss still decreasing at epoch 30. Single seed and split, so the TCN vs BiLSTM difference is not yet shown to be robust.
+- Transformer observations: ties BiLSTM (0.2 pts below, within noise); TCN is best of the three. Transformer final val loss 2.114 is the highest of the three. The fixed recipe (lr, epochs, regularization) may not suit all architectures equally. Single seed and split.
+- Milestone 3 (BiLSTM / TCN / Transformer comparison with a fixed recipe): done.
 - Earlier learning check (20k subset, 10 epochs): val top-1 0.366, top-5 0.640.
 
 ## Current step
-Transformer model (src/models/transformer.py): same interface and recipe as BiLSTM/TCN.
+Milestone 3 done (all three models in the results table). Next: Milestone 4 experiments (Next steps 1).
 
 ## Next steps
-1. TCN and Transformer models with the same recipe; add to the results table.
-2. Experiments (Milestone 4): presence mask, drop z, drop lower-body pose, face landmarks, stronger regularization against signer overfitting. Add held-out test signers before any hyperparameter tuning.
-3. src/realtime.py: webcam, MediaPipe Holistic, sliding window, smoothing, confidence threshold.
-4. Sentence builder + text-to-speech.
-5. Own recordings (10-20 words, multiple people) to test generalization.
-6. Streamlit demo, deploy (Hugging Face Spaces or Docker), demo video, README.
-7. Optional: fingerspelling (separate dataset) or drop from scope.
+1. Experiments (Milestone 4): presence mask, drop z, drop lower-body pose, face landmarks, stronger regularization against signer overfitting. Add held-out test signers before any hyperparameter tuning.
+2. src/realtime.py: webcam, MediaPipe Holistic, sliding window, smoothing, confidence threshold.
+3. Sentence builder + text-to-speech.
+4. Own recordings (10-20 words, multiple people) to test generalization.
+5. Streamlit demo, deploy (Hugging Face Spaces or Docker), demo video, README.
+6. Optional: fingerspelling (separate dataset) or drop from scope.
