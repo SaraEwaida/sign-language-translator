@@ -15,8 +15,9 @@ from torch.utils.data import DataLoader
 
 from src.dataset import load_splits
 from src.models.lstm import BiLSTMClassifier
+from src.models.tcn import TCNClassifier
 
-MODELS = {"bilstm": BiLSTMClassifier}
+MODELS = {"bilstm": BiLSTMClassifier, "tcn": TCNClassifier}
 
 
 def set_seed(seed: int) -> None:
