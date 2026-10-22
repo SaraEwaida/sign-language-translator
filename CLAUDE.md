@@ -36,6 +36,7 @@ Scope: isolated sign recognition (250 signs), not continuous ASL translation. Co
 - src/models/transformer.py: TransformerClassifier (same input proj; learned positional embedding for 64 frames; 4 pre-norm encoder layers, d_model 256, 4 heads, FF 512, GELU, dropout 0.3; final LayerNorm; same mean+max pooling head as TCN; no padding mask, all clips are 64 frames; 2.31M params, 4.6-7.7 ms/sample CPU across two self-test runs). CPU smoke test: 114-129 s/epoch on 3.4k clips, so full runs go on a Kaggle GPU.
 - src/train.py: AdamW, OneCycleLR, label smoothing 0.1, grad clip 1.0. Saves best val top-1 to checkpoints/<model>.pt and full training state every epoch to checkpoints/<model>_last.pt. --resume continues from _last.pt (refuses if epochs, batch size, lr, subset, seed or model differ). num_workers=0 default (Windows RAM).
 - src/evaluate.py: top-1/top-5, per-class accuracy, confusion matrix, most confused pairs; rebuilds the val split with split_indices(). Loads <model>.pt and <model>_last.pt. Reviewed. Matches train.py metrics on the 20k-subset checkpoint (top-1 0.366, top-5 0.640). Epoch-30 BiLSTM (bilstm_last.pt, --full-val): top-1 0.573, top-5 0.798, per-class mean 0.569.
+- src/realtime.py: webcam -> MediaPipe Holistic (Tasks API HolisticLandmarker, VIDEO mode; mediapipe 1.1.1 has no mp.solutions) on the unflipped frame -> (543, 3) NaN-filled parquet layout -> ring buffer (--window 22 = median raw clip length; 2000 random train.csv files, seed 42: min 2, median 22, p90 91, max 429) -> window_to_input() calls extract.preprocess() -> model every --stride 5 frames if a hand is in the buffer -> majority vote over --smooth 5, mean prob >= --threshold 0.5, no repeats, reset when the window has no hands. Needs holistic_landmarker.task (--holistic-model, default models/holistic_landmarker.task; not in repo). Offline consistency test: window_to_input() on 5 parquet videos equals X.npy rows exactly after float16 cast (max |diff| 1.949e-03, within half float16 spacing). Webcam loop not yet run.
 - Smoke test: python -m src.train --subset 4000 --epochs 2
 - Full run (start and resume use the same command, run in your own terminal):
   python -u -m src.train --epochs 30 --resume 2>&1 | tee -a train_bilstm.log
@@ -56,7 +57,7 @@ Scope: isolated sign recognition (250 signs), not continuous ASL translation. Co
 - Earlier learning check (20k subset, 10 epochs): val top-1 0.366, top-5 0.640.
 
 ## Current step
-Milestone 3 done (all three models in the results table). Next: Milestone 4 experiments (Next steps 1).
+Milestone 5: real-time recognition (src/realtime.py) with the TCN, checkpoints/tcn_last.pt (final epoch 30). Next: get holistic_landmarker.task, run the webcam loop. Milestone 4 experiments (Next steps 1) not started.
 
 ## Next steps
 1. Experiments (Milestone 4): presence mask, drop z, drop lower-body pose, face landmarks, stronger regularization against signer overfitting. Add held-out test signers before any hyperparameter tuning.
