@@ -32,8 +32,9 @@ Scope: isolated sign recognition (250 signs), not continuous ASL translation. Co
 - src/check_data.py: data sanity check
 - src/dataset.py: signer-independent split via split_indices() (3 held-out signers, seed 42 -> 4718, 36257, 37779), augmentation (mirror with hand/pose swap, rotation +-15 deg, scale 0.8-1.2, shift +-0.1, temporal crop 80-100%; missing points kept at 0). Returns (64, 225) float32 tensors.
 - src/models/lstm.py: BiLSTMClassifier (input proj 225->256, 2-layer BiLSTM, mean+max pooling, 2.95M params, 6.6 ms/sample CPU)
+- src/models/tcn.py: TCNClassifier (same input proj and mean+max pooling head as BiLSTM; 4 residual blocks of two non-causal Conv1d, kernel 5, dilation 1/2/4/8, BatchNorm, GELU, dropout 0.3; receptive field 121 frames, covers the 64-frame clip; 2.81M params, 4.7 ms/sample CPU). Smoke test (--model tcn --subset 4000 --epochs 2): ~42 s/epoch on 3.4k clips.
 - src/train.py: AdamW, OneCycleLR, label smoothing 0.1, grad clip 1.0. Saves best val top-1 to checkpoints/<model>.pt and full training state every epoch to checkpoints/<model>_last.pt. --resume continues from _last.pt (refuses if epochs, batch size, lr, subset, seed or model differ). num_workers=0 default (Windows RAM).
-- src/evaluate.py: written by Claude Code; matches train.py metrics on the 20k-subset checkpoint (top-1 0.366, top-5 0.640). Not yet reviewed line by line.
+- src/evaluate.py: top-1/top-5, per-class accuracy, confusion matrix, most confused pairs; rebuilds the val split with split_indices(). Loads <model>.pt and <model>_last.pt. Reviewed. Matches train.py metrics on the 20k-subset checkpoint (top-1 0.366, top-5 0.640). Epoch-30 BiLSTM (bilstm_last.pt, --full-val): top-1 0.573, top-5 0.798, per-class mean 0.569.
 - Smoke test: python -m src.train --subset 4000 --epochs 2
 - Full run (start and resume use the same command, run in your own terminal):
   python -u -m src.train --epochs 30 --resume 2>&1 | tee -a train_bilstm.log
@@ -49,7 +50,8 @@ Scope: isolated sign recognition (250 signs), not continuous ASL translation. Co
 - Earlier learning check (20k subset, 10 epochs): val top-1 0.366, top-5 0.640.
 
 ## Current step
-Review src/evaluate.py, then run it on checkpoints/bilstm.pt (per-class accuracy, confusion matrix, most confused sign pairs).
+Full TCN training, 30 epochs (run in your own terminal):
+  python -u -m src.train --model tcn --epochs 30 --resume 2>&1 | tee -a train_tcn.log
 
 ## Next steps
 1. TCN and Transformer models with the same recipe; add to the results table.
