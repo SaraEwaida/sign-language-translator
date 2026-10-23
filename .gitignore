@@ -14,3 +14,4 @@ data/custom/*
 !data/raw/.gitkeep
 !data/landmarks/.gitkeep
 !data/custom/.gitkeep
+models/
