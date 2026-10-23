@@ -9,6 +9,7 @@ passed with --holistic-model.
 
 Example:
   python -m src.realtime --ckpt checkpoints/tcn_last.pt --mirror
+  python -m src.realtime --video clip.mp4 --save annotated.mp4   # no webcam needed
 Keys: q quit, c clear words.
 """
 import argparse
@@ -110,6 +111,9 @@ def main() -> None:
     parser.add_argument("--holistic-model", type=Path,
                         default=Path("models/holistic_landmarker.task"))
     parser.add_argument("--camera", type=int, default=0)
+    parser.add_argument("--video", type=Path, default=None,
+                        help="read frames from this file instead of the camera")
+    parser.add_argument("--save", type=Path, default=None, help="write the annotated output (.mp4)")
     parser.add_argument("--window", type=int, default=DEFAULT_WINDOW, help="frames per prediction")
     parser.add_argument("--stride", type=int, default=5, help="run the model every N frames")
     parser.add_argument("--smooth", type=int, default=5, help="predictions in the majority vote")
@@ -131,13 +135,22 @@ def main() -> None:
         base_options=mp.tasks.BaseOptions(model_asset_path=str(args.holistic_model)),
         running_mode=vision.RunningMode.VIDEO,
     ))
-    cap = cv2.VideoCapture(args.camera)
+    cap = cv2.VideoCapture(str(args.video) if args.video else args.camera)
     if not cap.isOpened():
-        raise SystemExit(f"cannot open camera {args.camera}")
+        raise SystemExit(f"cannot open {args.video or f'camera {args.camera}'}")
+    src_fps = cap.get(cv2.CAP_PROP_FPS)
+    if not src_fps > 0:  # some files/cameras report 0; timestamps must still increase
+        src_fps = 30.0
+        print("warning: source reports no FPS, assuming 30")
+    if args.video:
+        print(f"video {args.video} | {src_fps:.2f} FPS | "
+              f"{int(cap.get(cv2.CAP_PROP_FRAME_COUNT))} frames")
 
     buffer = deque(maxlen=args.window)
     smoother = Smoother(args.smooth, args.threshold)
     words = deque(maxlen=5)
+    all_words = []  # full history for the end-of-video summary ('c' clears only the overlay)
+    writer = None
     top3, latency_ms, fps = [], 0.0, 0.0
     n_frames, t_prev, t_start = 0, time.perf_counter(), time.monotonic()
 
@@ -147,7 +160,10 @@ def main() -> None:
             if not ok:
                 break
             rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)  # unflipped: dataset hands are not mirrored
-            timestamp_ms = int((time.monotonic() - t_start) * 1000)
+            if args.video:  # file time, so results do not depend on processing speed
+                timestamp_ms = int(n_frames * 1000 / src_fps)
+            else:
+                timestamp_ms = int((time.monotonic() - t_start) * 1000)
             result = landmarker.detect_for_video(
                 mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb), timestamp_ms)
             frame = result_to_frame(result)
@@ -167,6 +183,7 @@ def main() -> None:
                 word = smoother.update(*top3[0])
                 if word is not None:
                     words.append(labels[word])
+                    all_words.append(labels[word])
 
             now = time.perf_counter()
             fps = 0.9 * fps + 0.1 / max(now - t_prev, 1e-6)  # smoothed camera FPS
@@ -177,6 +194,12 @@ def main() -> None:
             put_lines(display, [f"FPS {fps:.1f} | model {latency_ms:.1f} ms"]
                       + [f"{labels[c]}: {p:.2f}" for c, p in top3]
                       + ["words: " + " ".join(words)])
+            if args.save:
+                if writer is None:
+                    h, w = display.shape[:2]
+                    writer = cv2.VideoWriter(str(args.save), cv2.VideoWriter_fourcc(*"mp4v"),
+                                             src_fps, (w, h))
+                writer.write(display)
             cv2.imshow("ASL realtime", display)
 
             key = cv2.waitKey(1) & 0xFF
@@ -187,8 +210,13 @@ def main() -> None:
                 smoother.reset()
 
     cap.release()
+    if writer is not None:
+        writer.release()
+        print(f"saved {args.save}")
     landmarker.close()
     cv2.destroyAllWindows()
+    if args.video:
+        print(f"processed {n_frames} frames | emitted words ({len(all_words)}): {all_words}")
 
 
 if __name__ == "__main__":
